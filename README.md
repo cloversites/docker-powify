@@ -51,7 +51,7 @@ $ docker-powify foo bar # powify only foo and bar
 These scripts are specifically coded to affect the VM named 'default'
 ```
 
-## Forked and modified from:
+### Forked and modified from
 
 [@uasi](https://twitter.com/uasi) (<uasi@uasi.jp>)
 
