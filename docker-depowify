@@ -11,36 +11,51 @@ for_each() {
     done
 }
 
-make_proxy_conf() {
+rm_proxy_conf() {
     local port=$1
     local hostname=$2
     local conf="$POW_HOST_ROOT/$hostname"
-    echo $port > "$conf"
-    echo "Created $conf"
+    if [[ -e "$conf" && $(cat "$conf") = $port ]]; then
+        rm "$conf"
+        echo "Removed $conf"
+    fi
 }
 
-start_port_forwarding() {
+stop_port_forwarding() {
     local port=$1
-    local forwarder="boot2docker ssh -N -L $port:0.0.0.0:$port"
-    local forwarder_exists=
-    pgrep boot2docker | while read -r pid; do
+    pgrep docker-machine | while read -r pid; do
+        local forwarder="docker-machine ssh default -N -L $port:0.0.0.0:$port"
         if [[ $(ps -o command= $pid) = "$forwarder" ]]; then
-            echo "Port $port is already forwarded"
-            return 99
+            # Kill ssh spawned by docker ssh.
+            # Doing so will terminate docker ssh itself.
+            kill_with_ppid $pid
+            echo "Stopped forwarding port $port"
         fi
     done
-    [[ $? = 99 ]] && return
-    $forwarder &
-    echo "Started forwarding port $port"
 }
 
-setup_domain() {
+kill_with_ppid() {
+    local ppid=$1
+    ps -o 'ppid=,pid=' | for_each kill_with_ppid_ $ppid
+}
+
+kill_with_ppid_() {
+    local expected_ppid=$1
+    local ppid=$2
+    local pid=$3
+    if [[ $ppid = $expected_ppid ]]; then
+        kill $pid
+        echo "Killed ssh with pid $pid"
+    fi
+}
+
+teardown_domain() {
     local port=$1
     local name=$2
     local hostname=$(sed 's/_/-/g' <<< $name)
-    make_proxy_conf $port $hostname
-    start_port_forwarding $port
-    echo "======> http://$hostname.dev is live"
+    rm_proxy_conf $port $hostname
+    stop_port_forwarding $port
+    echo "======> http://$hostname.dev has gone"
 }
 
 to_port_and_name_list() {
@@ -63,4 +78,4 @@ filter_by_name() {
 
 target_names=$*
 list=$(docker ps --no-trunc=true | to_port_and_name_list | filter_by_name "$target_names")
-for_each setup_domain <<< "$list"
+for_each teardown_domain <<< "$list"
